@@ -25,6 +25,7 @@ await check('Landing page, logo asset, direct entry and registration validation'
  await page.getByRole('link',{name:'Start workshop',exact:true}).click();
  await page.locator('#join-form button[type="submit"]').click();assert.equal(await page.locator('#join-form input:invalid').count(),2);
  await fill('profile.name','Darren');await fill('profile.role','Manager');await fill('profile.org','Fictional Harbour Services');await fill('profile.task','Weekly meeting summaries');
+ await page.locator('#profile-consent').check();
  await page.locator('#join-form button[type="submit"]').click();await page.getByRole('heading',{name:'Welcome, Darren.'}).waitFor();assert.equal(await page.locator('.session-card').count(),8);
 });
 await check('Opening challenge notes, copy, reveal and reload persistence',async()=>{
@@ -123,7 +124,7 @@ await check('Keyboard navigation, labelled controls and fallback navigation',asy
 });
 await check('Fresh participant direct entry, stored HTML escaping and unavailable storage',async()=>{
  const fresh=await browser.newContext();const p=await fresh.newPage();await p.goto(base+'#s7');await p.waitForURL('**/#join');await p.goto(base+'?join=1');assert.equal(await p.locator('#join-form').count(),1);
- await p.locator('[data-field="profile.name"]').fill('<img src=x onerror=alert(1)>');await p.locator('[data-field="profile.role"]').fill('Tester');await p.locator('[data-field="profile.task"]').fill('Check content');await p.locator('#join-form button').click();assert.equal(await p.locator('.page-title img').count(),0);assert.match(await p.locator('.page-title').textContent(),/<img/);await fresh.close();
+ await p.locator('[data-field="profile.name"]').fill('<img src=x onerror=alert(1)>');await p.locator('[data-field="profile.role"]').fill('Tester');await p.locator('[data-field="profile.task"]').fill('Check content');await p.locator('#profile-consent').check();await p.locator('#join-form button').click();assert.equal(await p.locator('.page-title img').count(),0);assert.match(await p.locator('.page-title').textContent(),/<img/);await fresh.close();
  const blocked=await browser.newContext();await blocked.addInitScript(()=>{Storage.prototype.setItem=function(){throw new Error('blocked');};});const p2=await blocked.newPage();await p2.goto(base+'#join');await p2.locator('[data-field="profile.name"]').fill('Test');assert.match(await p2.locator('#toast').textContent(),/storage is unavailable/);await blocked.close();
 });
 assert.deepEqual(errors,[]);results.push('No uncaught browser errors');
