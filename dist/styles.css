@@ -20,3 +20,4 @@ body{overflow-x:hidden}
 
 main[tabindex="-1"]:focus{outline:none}
 .preserve,.instruction,.activity-title p,.objective p{font-size:1rem}.side-nav nav a,.template-body pre,.output-card pre,.check-row,.checklist-item{font-size:.875rem}
+.site-footer{max-width:1256px;margin:auto;padding:18px 48px 28px;display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;border-top:1px solid var(--line);font-size:.72rem;color:#798291}.projection-copyright{font-size:.72rem;color:#aeb9c9;line-height:1.45;white-space:normal}.projection-footer .projection-copyright{margin-right:auto}@media(max-width:700px){.site-footer{padding:14px 20px 24px;flex-direction:column;gap:6px;font-size:.68rem}.projection-footer .projection-copyright{margin-right:0}}

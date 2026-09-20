@@ -20,7 +20,7 @@ const fill=async (key,v)=>page.locator(`[data-field="${key}"]`).fill(v);
 await mkdir('test-results',{recursive:true});
 try{
 await check('Landing page, logo asset, direct entry and registration validation',async()=>{
- await go('');assert.equal(await page.title(),'Practical AI for Professionals · Workshop');assert(await page.locator('.costaatt-logo').evaluate(el=>el.complete&&el.naturalWidth===474));assert.equal(await page.locator('.qr-frame img').count(),1);assert(await page.locator('.qr-frame img').evaluate(el=>el.complete&&el.naturalWidth>0));assert.equal(await page.locator('.join-url').getAttribute('href'),'https://costaattworkshop.site/#join');
+ await go('');assert.equal(await page.title(),'Practical AI for Professionals · Workshop');assert(await page.locator('.costaatt-logo').evaluate(el=>el.complete&&el.naturalWidth===474));assert.equal(await page.locator('.qr-frame img').count(),1);assert(await page.locator('.qr-frame img').evaluate(el=>el.complete&&el.naturalWidth>0));assert.equal(await page.locator('.join-url').getAttribute('href'),'https://costaattworkshop.site/#join');assert.equal(await page.locator('.site-footer').count(),1);assert.match(await page.locator('.site-footer').textContent(),/© 2026 COSTAATT/);assert.match(await page.locator('.site-footer').textContent(),/Technology Services Department/);
  await page.screenshot({path:'test-results/home-desktop.png',fullPage:true});
  await page.getByRole('link',{name:'Start workshop',exact:true}).click();
  await page.locator('#join-form button[type="submit"]').click();assert.equal(await page.locator('#join-form input:invalid').count(),2);
