@@ -1,0 +1,4 @@
+.sites-runtime/
+test-results/
+node_modules/
+.DS_Store

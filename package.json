@@ -1,0 +1,6 @@
+{
+  "name": "practical-ai-workshop",
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "node server.mjs", "start": "node server.mjs", "test": "node tests/workshop.mjs", "check": "node --check dist/app.js && node --check dist/content.js && node --check server.mjs" }
+}
