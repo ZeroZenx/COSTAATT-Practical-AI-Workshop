@@ -90,10 +90,11 @@ await check('All session completion controls and persisted dashboard progress',a
  for(let i=2;i<=8;i++){await go('#s'+i);await page.locator('[data-action="complete"]').click();}
  await go('#journey');assert.equal(await page.locator('.session-card.completed').count(),8);await page.reload();assert.equal(await page.locator('.session-card.completed').count(),8);assert.equal(await page.locator('progress').getAttribute('value'),'8');await page.screenshot({path:'test-results/journey-desktop.png',fullPage:true});
 });
-await check('All 12 resource templates, checklist print and workbook download',async()=>{
+await check('All 12 resource templates, rich workbook PDF and completion certificate',async()=>{
  await go('#resources');assert.equal(await page.locator('.template-card').count(),12);for(const d of await page.locator('.template-card').all()){await d.locator('summary').click();await d.locator('[data-copy]').click();assert.match(await page.evaluate(()=>navigator.clipboard.readText()),/CONTEXT/);}
  await page.locator('[data-field="checklist.0"]').check();await page.evaluate(()=>{window.print=()=>{window.__printed=true;};});await page.locator('[data-action="print-checklist"]').click();assert.match(await page.locator('#print-area').textContent(),/Have I verified important facts/);await page.pdf({path:'test-results/checklist.pdf',format:'A4',printBackground:true});
- const d=page.waitForEvent('download');await page.locator('[data-action="export-work"]').first().click();const dl=await d;await dl.saveAs('test-results/workbook.txt');assert.match(await readFile('test-results/workbook.txt','utf8'),/Reviewed deliverable 6/);
+ await page.locator('[data-action="print-workbook"]').first().click();assert(await page.evaluate(()=>window.__printed));assert.equal(await page.locator('#print-area.print-workbook .workbook-cover').count(),1);assert.match(await page.locator('#print-area').textContent(),/Reviewed deliverable 6/);await page.pdf({path:'test-results/workbook.pdf',format:'A4',printBackground:true});
+ assert.equal(await page.locator('[data-action="print-certificate"]').count(),1);await page.locator('[data-action="print-certificate"]').click();assert.equal(await page.locator('#print-area.print-certificate .certificate-page').count(),1);assert.match(await page.locator('#print-area').textContent(),/Darren/);
 });
 await check('Facilitator agenda, all launches, per-activity display and isolated navigation',async()=>{
  assert.equal(await page.locator('a[href="#facilitator"]').count(),0);await go('#facilitator');assert.equal(await page.locator('.agenda-item').count(),8);
