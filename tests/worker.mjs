@@ -85,8 +85,9 @@ class MemoryD1 {
 }
 
 const db = new MemoryD1();
-const env = { DB: db, REPORTING_OWNER_ID: 'test-owner' };
+const env = { DB: db, REMOTE_CONTROL_CODE: 'TESTCODE2226' };
 const ownerHeaders = { 'oai-authenticated-user-id': 'test-owner' };
+const controlHeaders = { 'x-workshop-control-code': 'TEST-CODE-2226' };
 async function call(path, { method = 'GET', headers = {}, body } = {}) {
   const request = new Request(`https://workshop.example${path}`, {
     method,
@@ -97,39 +98,44 @@ async function call(path, { method = 'GET', headers = {}, body } = {}) {
 }
 
 assert.equal((await call('/api/participants')).status, 401, 'anonymous report reads must fail');
-assert.equal((await call('/api/participants', { headers: { 'oai-authenticated-user-id': 'other-user' } })).status, 403, 'other signed-in users must fail');
+assert.equal((await call('/api/participants', { headers: ownerHeaders })).status, 401, 'account sign-in alone must not authorize reports');
+assert.equal((await call('/api/participants', { headers: { 'x-workshop-control-code': 'WRONGCODE2226' } })).status, 401, 'incorrect facilitator codes must not authorize reports');
 
 const now = new Date().toISOString();
 const participant = { id: 'participant-1', name: 'Example Learner', role: 'Analyst', org: 'Sample Team', consent: true, completed: [0, 1], challenges: 2, gameAnswers: 3, lastSeen: now, joinedAt: now };
 assert.equal((await call('/api/participants', { method: 'POST', body: participant })).status, 200, 'participant opt-in writes must work without staff sign-in');
-const reportResponse = await call('/api/participants', { headers: ownerHeaders });
+const reportResponse = await call('/api/participants', { headers: controlHeaders });
 assert.equal(reportResponse.status, 200);
 const report = await reportResponse.json();
 assert.deepEqual(report.participants[0], { name: 'Example Learner', role: 'Analyst', org: 'Sample Team', completedCount: 2, challengeCount: 2, gameAnswerCount: 3 });
 assert.equal('id' in report.participants[0], false, 'report API must not expose participant identifiers');
 assert.equal('lastSeen' in report.participants[0], false, 'report API must not expose activity timestamps');
 assert.equal((await call('/api/participants/participant-1', { method: 'DELETE' })).status, 204, 'a participant must be able to withdraw their own record by its browser-held token');
-assert.equal((await call('/api/participants', { headers: ownerHeaders })).status, 200);
-assert.equal((await (await call('/api/participants', { headers: ownerHeaders })).json()).participants.length, 0);
+assert.equal((await call('/api/participants', { headers: controlHeaders })).status, 200);
+assert.equal((await (await call('/api/participants', { headers: controlHeaders })).json()).participants.length, 0);
 
 const initialProjection = { projection: { session: 0, activity: 0, mode: 'challenge' }, timer: null };
-assert.equal((await call('/api/projection/rooms', { method: 'POST', body: initialProjection })).status, 401, 'only the owner may create a projection room');
-const create = await call('/api/projection/rooms', { method: 'POST', headers: ownerHeaders, body: initialProjection });
+assert.equal((await call('/api/projection/rooms', { method: 'POST', body: initialProjection })).status, 401, 'room creation requires the facilitator code');
+assert.equal((await call('/api/projection/rooms', { method: 'POST', headers: ownerHeaders, body: initialProjection })).status, 401, 'account sign-in alone must not control projector rooms');
+assert.equal((await call('/api/projection/rooms', { method: 'POST', headers: { 'x-workshop-control-code': 'WRONGCODE2226' }, body: initialProjection })).status, 401, 'an incorrect facilitator code must fail');
+const create = await call('/api/projection/rooms', { method: 'POST', headers: controlHeaders, body: initialProjection });
 assert.equal(create.status, 201);
 const { roomId } = await create.json();
 assert.match(roomId, /^[0-9a-f-]{36}$/i);
 const display = await call(`/api/projection/rooms/${roomId}`);
 assert.equal(display.status, 200, 'projector link must remain readable without sign-in');
 assert.deepEqual((await display.json()).state, initialProjection);
-assert.equal((await call(`/api/projection/rooms/${roomId}`, { method: 'PUT', body: initialProjection })).status, 401, 'anonymous projector visitors must not control a room');
+assert.equal((await call(`/api/projection/rooms/${roomId}`, { method: 'PUT', body: initialProjection })).status, 401, 'projector visitors without the facilitator code must not control a room');
+assert.equal((await call(`/api/projection/rooms/${roomId}`, { method: 'PUT', headers: ownerHeaders, body: initialProjection })).status, 401, 'account sign-in alone must not control a projector room');
 const nextProjection = { projection: { session: 1, activity: 2, mode: 'reveal' }, timer: { endAt: null, remaining: 480 } };
-assert.equal((await call(`/api/projection/rooms/${roomId}`, { method: 'PUT', headers: ownerHeaders, body: nextProjection })).status, 200);
+assert.equal((await call(`/api/projection/rooms/${roomId}`, { method: 'PUT', headers: controlHeaders, body: nextProjection })).status, 200);
 assert.deepEqual((await (await call(`/api/projection/rooms/${roomId}`)).json()).state, nextProjection);
-assert.equal((await call(`/api/projection/rooms/${roomId}`, { method: 'PUT', headers: ownerHeaders, body: { projection: { session: 99, activity: 0, mode: 'reveal' } } })).status, 400, 'invalid projection values must be rejected');
-assert.equal((await call(`/api/projection/rooms/${roomId}`, { method: 'DELETE' })).status, 401, 'only the owner may end a room');
-assert.equal((await call(`/api/projection/rooms/${roomId}`, { method: 'DELETE', headers: ownerHeaders })).status, 204);
+assert.equal((await call(`/api/projection/rooms/${roomId}`, { method: 'PUT', headers: controlHeaders, body: { projection: { session: 99, activity: 0, mode: 'reveal' } } })).status, 400, 'invalid projection values must be rejected');
+assert.equal((await call(`/api/projection/rooms/${roomId}`, { method: 'DELETE' })).status, 401, 'ending a room requires the facilitator code');
+assert.equal((await call(`/api/projection/rooms/${roomId}`, { method: 'DELETE', headers: controlHeaders })).status, 204);
 assert.equal((await call(`/api/projection/rooms/${roomId}`)).status, 404);
 
-assert.equal((await call('/api/participants', { method: 'DELETE' })).status, 401, 'only the owner may clear reporting data');
-assert.equal((await call('/api/participants', { method: 'DELETE', headers: ownerHeaders })).status, 204);
+assert.equal((await call('/api/participants', { method: 'DELETE' })).status, 401, 'clearing shared reporting requires the facilitator code');
+assert.equal((await call('/api/participants', { method: 'DELETE', headers: ownerHeaders })).status, 401, 'account sign-in alone must not clear shared reporting');
+assert.equal((await call('/api/participants', { method: 'DELETE', headers: controlHeaders })).status, 204);
 console.log('Worker access, opt-in, withdrawal, report minimization, and remote-room checks passed.');

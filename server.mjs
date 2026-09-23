@@ -39,7 +39,9 @@ async function saveProjectionRooms(data){
 }
 function sendJson(res,status,payload){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}).end(JSON.stringify(payload));}
 function sendNoContent(res){res.writeHead(204,{'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'}).end();}
-function ownerDenied(req){const expected=process.env.REPORTING_OWNER_ID;if(!expected)return {status:503,message:'Owner access is not configured.'};const id=req.headers['oai-authenticated-user-id'];if(!id)return {status:401,message:'Sign in with the workshop owner account.'};if(id!==expected)return {status:403,message:'Owner access only.'};return null;}
+function cleanControlCode(value){return String(value||'').replace(/[^a-z0-9]/gi,'').toUpperCase();}
+function controlCodeMatches(expected,supplied){let mismatch=expected.length^supplied.length;for(let i=0;i<Math.max(expected.length,supplied.length);i++)mismatch|=(expected.charCodeAt(i)||0)^(supplied.charCodeAt(i)||0);return mismatch===0;}
+function remoteControlDenied(req){const expected=cleanControlCode(process.env.REMOTE_CONTROL_CODE);if(!/^[A-Z2-9]{12}$/.test(expected))return {status:503,message:'Facilitator access is not configured.'};const supplied=cleanControlCode(req.headers['x-workshop-control-code']);if(!controlCodeMatches(expected,supplied))return {status:401,message:'Facilitator code required or incorrect.'};return null;}
 function cleanProjection(payload){const p=payload?.projection||{},session=Number(p.session),activity=Number(p.activity),mode=String(p.mode||'');if(!Number.isInteger(session)||session<0||session>7||!Number.isInteger(activity)||activity<0||activity>9||!['challenge','timer','discussion','reveal'].includes(mode))throw new Error('Invalid projection state.');let timer=null;if(payload?.timer&&typeof payload.timer==='object'){const rawEnd=Number(payload.timer.endAt),endAt=Number.isFinite(rawEnd)&&rawEnd>0?rawEnd:null,remaining=Math.max(0,Math.min(7200,Number.parseInt(payload.timer.remaining,10)||0));if(endAt&&endAt>Date.now()+7200000)throw new Error('Timer exceeds the session limit.');timer={endAt,remaining};}return {projection:{session,activity,mode},timer};}
 async function bodyJson(req){
  let body='';for await(const chunk of req){body+=chunk;if(body.length>1000000)throw new Error('Request too large.');}
@@ -47,13 +49,13 @@ async function bodyJson(req){
 }
 async function api(req,res,pathname){
  if(req.method==='GET'&&pathname==='/api/participants'){
-  const denied=ownerDenied(req);if(denied){sendJson(res,denied.status,{error:denied.message});return true;}
+  const denied=remoteControlDenied(req);if(denied){sendJson(res,denied.status,{error:denied.message});return true;}
   const data=await loadParticipants();
   const participants=Object.values(data).sort((a,b)=>String(b.lastSeen).localeCompare(String(a.lastSeen))).map(row=>({name:row.name,role:row.role,org:row.org,completedCount:Array.isArray(row.completed)?row.completed.length:0,challengeCount:row.challenges||0,gameAnswerCount:row.gameAnswers||0}));
   sendJson(res,200,{participants});return true;
  }
  if(req.method==='DELETE'&&pathname==='/api/participants'){
-  const denied=ownerDenied(req);if(denied){sendJson(res,denied.status,{error:denied.message});return true;}
+  const denied=remoteControlDenied(req);if(denied){sendJson(res,denied.status,{error:denied.message});return true;}
   await saveParticipants({});sendNoContent(res);return true;
  }
  const participantDelete=pathname.match(/^\/api\/participants\/([a-zA-Z0-9-]{1,120})$/);
@@ -64,12 +66,12 @@ async function api(req,res,pathname){
   return true;
  }
  if(req.method==='POST'&&pathname==='/api/projection/rooms'){
-  const denied=ownerDenied(req);if(denied){sendJson(res,denied.status,{error:denied.message});return true;}
+  const denied=remoteControlDenied(req);if(denied){sendJson(res,denied.status,{error:denied.message});return true;}
   try{const projection=cleanProjection(await bodyJson(req)),rooms=await loadProjectionRooms(),now=new Date().toISOString(),expiresAt=new Date(Date.now()+12*60*60*1000).toISOString(),roomId=crypto.randomUUID();for(const [id,room] of Object.entries(rooms))if(Date.parse(room.expiresAt)<=Date.now())delete rooms[id];rooms[roomId]={state:projection,createdAt:now,updatedAt:now,expiresAt};await saveProjectionRooms(rooms);sendJson(res,201,{roomId,expiresAt});}catch(error){sendJson(res,400,{error:error instanceof Error?error.message:'Invalid projection state'});}return true;
  }
  const roomMatch=pathname.match(/^\/api\/projection\/rooms\/([0-9a-f-]{36})$/i);
- if(roomMatch){const roomId=roomMatch[1],rooms=await loadProjectionRooms(),room=rooms[roomId];if(req.method==='GET'){if(!room||Date.parse(room.expiresAt)<=Date.now()){sendJson(res,404,{error:'Projection room not found.'});return true;}sendJson(res,200,{state:room.state,updatedAt:room.updatedAt,expiresAt:room.expiresAt});return true;}if(req.method==='PUT'||req.method==='DELETE'){const denied=ownerDenied(req);if(denied){sendJson(res,denied.status,{error:denied.message});return true;}if(!room||Date.parse(room.expiresAt)<=Date.now()){sendJson(res,404,{error:'Projection room not found.'});return true;}if(req.method==='DELETE'){delete rooms[roomId];await saveProjectionRooms(rooms);sendNoContent(res);return true;}try{room.state=cleanProjection(await bodyJson(req));room.updatedAt=new Date().toISOString();await saveProjectionRooms(rooms);sendJson(res,200,{ok:true});}catch(error){sendJson(res,400,{error:error instanceof Error?error.message:'Invalid projection state'});}return true;}}
- if(req.method==='OPTIONS'&&pathname.startsWith('/api/')){res.writeHead(204,{'Access-Control-Allow-Methods':'GET,POST,PUT,DELETE','Access-Control-Allow-Headers':'content-type,accept,oai-authenticated-user-id'}).end();return true;}
+ if(roomMatch){const roomId=roomMatch[1],rooms=await loadProjectionRooms(),room=rooms[roomId];if(req.method==='GET'){if(!room||Date.parse(room.expiresAt)<=Date.now()){sendJson(res,404,{error:'Projection room not found.'});return true;}sendJson(res,200,{state:room.state,updatedAt:room.updatedAt,expiresAt:room.expiresAt});return true;}if(req.method==='PUT'||req.method==='DELETE'){const denied=remoteControlDenied(req);if(denied){sendJson(res,denied.status,{error:denied.message});return true;}if(!room||Date.parse(room.expiresAt)<=Date.now()){sendJson(res,404,{error:'Projection room not found.'});return true;}if(req.method==='DELETE'){delete rooms[roomId];await saveProjectionRooms(rooms);sendNoContent(res);return true;}try{room.state=cleanProjection(await bodyJson(req));room.updatedAt=new Date().toISOString();await saveProjectionRooms(rooms);sendJson(res,200,{ok:true});}catch(error){sendJson(res,400,{error:error instanceof Error?error.message:'Invalid projection state'});}return true;}}
+ if(req.method==='OPTIONS'&&pathname.startsWith('/api/')){res.writeHead(204,{'Access-Control-Allow-Methods':'GET,POST,PUT,DELETE','Access-Control-Allow-Headers':'content-type,accept,x-workshop-control-code'}).end();return true;}
  return false;
 }
 

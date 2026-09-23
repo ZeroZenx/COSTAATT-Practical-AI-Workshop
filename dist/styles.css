@@ -41,7 +41,7 @@ main[tabindex="-1"]:focus{outline:none}
 .remote-controller{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:10px 20px;margin:18px 0 22px;padding:22px}
 .remote-controller h2{font-size:1.1rem;margin:0 0 7px}
 .remote-controller p{margin:5px 0}
-.remote-controller #projection-share-status{grid-column:1/-1}
+.remote-controller #projection-share-status{grid-column:1/-1}.remote-controller .remote-code-field{grid-column:1/-1;width:min(100%,520px)}.reporting-access{display:flex;align-items:flex-end;gap:12px;margin:0 0 18px;padding:18px 22px}.reporting-access .remote-code-field{flex:1;max-width:520px}.remote-code-field small{display:block;margin-top:5px;color:var(--muted)}
 .remote-link-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .remote-link-row input{flex:1 1 360px;min-width:0;padding:11px 12px;border:1px solid var(--line);border-radius:8px;color:var(--ink);background:#fff;font:inherit}
 .remote-live{font-size:.85rem;font-weight:750;letter-spacing:.04em;color:#d9f879}
@@ -56,5 +56,5 @@ main[tabindex="-1"]:focus{outline:none}
 .button.danger{border-color:#a33939;color:#8c2525;background:#fff}
 .button.danger:hover{background:#fff1f1}
 .certificate-evidence{font-size:8pt;color:#526072;margin:1mm 0 0}
-@media(max-width:760px){.remote-controller{grid-template-columns:1fr}.remote-controller #projection-share-status{grid-column:auto}.remote-link-row{align-items:stretch}.remote-link-row input{flex-basis:100%}.reporting-retention{align-items:flex-start;flex-direction:column}}
+@media(max-width:760px){.reporting-access{align-items:stretch;flex-direction:column}.reporting-access .remote-code-field{width:100%}.reporting-access>.button{width:100%}.remote-controller{grid-template-columns:1fr}.remote-controller #projection-share-status{grid-column:auto}.remote-link-row{align-items:stretch}.remote-link-row input{flex-basis:100%}.reporting-retention{align-items:flex-start;flex-direction:column}}
 @media(max-width:600px){.projection-footer>span{white-space:normal;max-width:100%;text-align:center}.projection-footer .projection-copyright{width:100%;min-width:0;max-width:100%;overflow-wrap:anywhere}}
