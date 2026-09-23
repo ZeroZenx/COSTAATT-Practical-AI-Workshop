@@ -12,7 +12,7 @@ const errors=[];
 page.on('pageerror',e=>errors.push(e.message));
 page.on('dialog',d=>d.accept());
 const results=[];
-const base='http://127.0.0.1:4173/';
+const base=process.env.WORKSHOP_TEST_URL||'http://127.0.0.1:4173/';
 const check=async (name,fn)=>{await fn();results.push(name);console.log('PASS',name);};
 const go=async hash=>{await page.goto(base+hash);await page.locator('#main').waitFor();};
 const value=async key=>page.locator(`[data-field="${key}"]`).inputValue();
@@ -25,8 +25,8 @@ await check('Landing page, logo asset, direct entry and registration validation'
  await page.getByRole('link',{name:'Start workshop',exact:true}).click();
  await page.locator('#join-form button[type="submit"]').click();assert.equal(await page.locator('#join-form input:invalid').count(),2);
  await fill('profile.name','Darren');await fill('profile.role','Manager');await fill('profile.org','Fictional Harbour Services');await fill('profile.task','Weekly meeting summaries');
- await page.locator('#profile-consent').check();
- await page.locator('#join-form button[type="submit"]').click();await page.getByRole('heading',{name:'Welcome, Darren.'}).waitFor();assert.equal(await page.locator('.session-card').count(),8);
+ await page.locator('#join-form button[type="submit"]').click();await page.getByRole('heading',{name:'Welcome, Darren.'}).waitFor();assert.equal(await page.locator('.session-card').count(),8);assert.equal(JSON.parse(await page.evaluate(()=>localStorage.getItem('practical-ai-workshop-v1'))).consent,false);
+ await go('#join');await page.locator('#profile-consent').check();await page.locator('#join-form button[type="submit"]').click();await page.getByRole('heading',{name:'Welcome, Darren.'}).waitFor();assert.equal(JSON.parse(await page.evaluate(()=>localStorage.getItem('practical-ai-workshop-v1'))).consent,true);
 });
 await check('Opening challenge notes, copy, reveal and reload persistence',async()=>{
  await go('#s1');await fill('opening.prompt','Summarise the facts. Flag unknowns. Do not invent approvals.');
@@ -88,7 +88,7 @@ await check('Action plan live output, print content, text export and PDF renderi
 });
 await check('All session completion controls and persisted dashboard progress',async()=>{
  for(let i=2;i<=8;i++){await go('#s'+i);await page.locator('[data-action="complete"]').click();}
- await go('#journey');assert.equal(await page.locator('.session-card.completed').count(),8);await page.reload();assert.equal(await page.locator('.session-card.completed').count(),8);assert.equal(await page.locator('progress').getAttribute('value'),'8');await page.screenshot({path:'test-results/journey-desktop.png',fullPage:true});
+ await go('#journey');assert.equal(await page.locator('.session-card.completed').count(),8);assert.equal(await page.locator('.journey-feature').evaluate(el=>el.getBoundingClientRect().top<900),true,'primary continue action should appear early on the dashboard');await page.reload();assert.equal(await page.locator('.session-card.completed').count(),8);assert.equal(await page.locator('.side-nav progress').getAttribute('value'),'8');await page.screenshot({path:'test-results/journey-desktop.png',fullPage:true});
 });
 await check('All 12 resource templates, rich workbook PDF and completion certificate',async()=>{
  await go('#resources');assert.equal(await page.locator('.template-card').count(),12);for(const d of await page.locator('.template-card').all()){await d.locator('summary').click();await d.locator('[data-copy]').click();assert.match(await page.evaluate(()=>navigator.clipboard.readText()),/CONTEXT/);}
@@ -107,8 +107,20 @@ await check('Projection logo, live cross-tab controls, reveal and timer synchron
  await page.locator('[data-action="project-mode"][data-key="timer"]').click();await projector.locator('.timer').waitFor();await page.locator('[data-action="timer-toggle"]').click();await projector.waitForTimeout(1600);assert.notEqual(await projector.locator('.timer-value').textContent(),'12:00');
  await page.locator('[data-action="timer-toggle"]').click();await page.locator('[data-action="project-mode"][data-key="discussion"]').click();await projector.getByRole('heading',{name:'What did you notice?'}).waitFor();await projector.screenshot({path:'test-results/projection-desktop.png',fullPage:true});await projector.close();
 });
+await check('Remote projector link displays live state and keeps control owner-only',async()=>{
+ const initial={projection:{session:1,activity:0,mode:'discussion'},timer:null};
+ assert.equal((await fetch(base+'api/projection/rooms',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(initial)})).status,401);
+ const created=await fetch(base+'api/projection/rooms',{method:'POST',headers:{'content-type':'application/json','oai-authenticated-user-id':'test-owner'},body:JSON.stringify(initial)});assert.equal(created.status,201);const {roomId}=await created.json();
+ const projector=await context.newPage();await projector.goto(base+'#present?room='+roomId);await projector.getByRole('heading',{name:'What did you notice?'}).waitFor();assert.match(await projector.locator('.projection-header').textContent(),/SESSION 02 \/ 08/);assert.equal(await projector.locator('[data-action="project-mode"]').count(),0);
+ const next={projection:{session:5,activity:0,mode:'reveal'},timer:null};const changed=await fetch(base+'api/projection/rooms/'+roomId,{method:'PUT',headers:{'content-type':'application/json','oai-authenticated-user-id':'test-owner'},body:JSON.stringify(next)});assert.equal(changed.status,200);await projector.getByRole('heading',{name:'A useful approach.'}).waitFor();assert.match(await projector.locator('.projection-header').textContent(),/SESSION 06 \/ 08/);await projector.close();
+ assert.equal((await fetch(base+'api/projection/rooms/'+roomId,{method:'DELETE'})).status,401);assert.equal((await fetch(base+'api/projection/rooms/'+roomId,{method:'DELETE',headers:{'oai-authenticated-user-id':'test-owner'}})).status,204);
+ const adminContext=await browser.newContext();await adminContext.route('**/api/projection/rooms**',route=>route.continue({headers:{...route.request().headers(),'oai-authenticated-user-id':'test-owner'}}));const admin=await adminContext.newPage();await admin.goto(base+'#facilitator');await admin.getByRole('button',{name:'Start remote screen'}).click();await admin.locator('#projection-room-link').waitFor();assert.match(await admin.locator('#projection-room-link').inputValue(),/#present\?room=/);await adminContext.close();
+});
+await check('Participant report asks for owner sign-in and hides details until expanded',async()=>{
+ await go('#reporting');await page.getByRole('link',{name:'Sign in with ChatGPT'}).waitFor();assert.equal(await page.locator('.reporting-details').evaluate(el=>el.open),false);assert.match(await page.locator('.reporting-retention').textContent(),/Clear shared records/);
+});
 await check('Content editor saves, export works, invalid import fails and restore works',async()=>{
- await page.locator('[data-action="launch"][data-index="0"]').click();await page.locator('.editor-details>summary').click();await page.locator('[data-edit="sessions.0.raw"]').fill('Edited fictional opening request.');await page.locator('#content-form button[type="submit"]').click();
+ await go('#facilitator');await page.locator('[data-action="launch"][data-index="0"]').click();await page.locator('.editor-details>summary').click();await page.locator('[data-edit="sessions.0.raw"]').fill('Edited fictional opening request.');await page.locator('#content-form button[type="submit"]').click();
  await go('#s1');assert.match(await page.locator('.raw-card').textContent(),/Edited fictional opening/);await page.reload();assert.match(await page.locator('.raw-card').textContent(),/Edited fictional opening/);
  await go('#facilitator');await page.locator('.editor-details>summary').click();const d=page.waitForEvent('download');await page.locator('[data-action="export-content"]').click();const dl=await d;await dl.saveAs('test-results/content-pack.json');assert.match(await readFile('test-results/content-pack.json','utf8'),/Edited fictional/);
  await page.locator('#import-content').setInputFiles({name:'invalid.json',mimeType:'application/json',buffer:Buffer.from('{"test":true}')});await page.waitForTimeout(50);assert.match(await page.locator('#editor-status').textContent(),/Import failed/);

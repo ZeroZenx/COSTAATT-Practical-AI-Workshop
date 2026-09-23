@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "node server.mjs",
     "start": "node server.mjs",
-    "test": "node tests/workshop.mjs",
+    "test": "node tests/worker.mjs && node tests/workshop.mjs",
     "check": "node scripts/build-worker.mjs && node --check dist/app.js && node --check dist/content.js && node --check server.mjs && node --check worker/index.js",
     "build:worker": "node scripts/build-worker.mjs"
   }
